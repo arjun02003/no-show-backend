@@ -29,26 +29,38 @@ def home():
 
 @app.post("/predict")
 def predict(data: Patient):
-    # user input
-    input_data = data.dict()
+    try:
+        # user input
+        input_data = data.dict()
 
-    # create empty row with ALL model features = 0
-    row = {feature: 0 for feature in model_features}
+        # initialize ALL features = 0
+        row = {feature: 0 for feature in model_features}
 
-    # fill only available features
-    for key, value in input_data.items():
-        if key in row:
-            row[key] = value
+        # fill user provided values
+        for k, v in input_data.items():
+            if k in row:
+                row[k] = int(v)
 
-    # create dataframe in exact order
-    df = pd.DataFrame([row], columns=model_features)
+        # dataframe with exact order
+        df = pd.DataFrame([row])
+        df = df[model_features]
 
-    # prediction
-    prob = model.predict_proba(df)[0][1]
+        # 🔴 CRITICAL FIX: force numeric dtype
+        df = df.astype(float)
 
-    return {
-        "no_show_risk": round(float(prob), 3)
-    }
+        prob = model.predict_proba(df)[0][1]
+
+        return {
+            "no_show_risk": round(float(prob), 3)
+        }
+
+    except Exception as e:
+        # so we SEE the real error instead of 500
+        return {
+            "error": str(e)
+        }
+
+
 
 @app.get("/debug")
 def debug():
