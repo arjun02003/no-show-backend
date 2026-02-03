@@ -18,8 +18,8 @@ app.add_middleware(
 )
 
 # ---------- SERVE FRONTEND ----------
-# index.html must be in same folder
-app.mount("/ui", StaticFiles(directory=".", html=True), name="ui")
+# frontend/index.html
+app.mount("/ui", StaticFiles(directory="frontend", html=True), name="ui")
 
 # ---------- LOAD MODEL ----------
 model = joblib.load("xgboost_no_show_model.pkl")
