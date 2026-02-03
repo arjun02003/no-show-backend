@@ -26,21 +26,21 @@ def home():
 
 @app.post("/predict")
 def predict(data: Patient):
-    df = pd.DataFrame([data.dict()])
+    input_dict = data.dict()
 
-    # ensure all model features exist
-    for col in model.feature_names_in_:
+    df = pd.DataFrame([input_dict])
+
+    # Load feature list manually from training
+    expected_features = model.get_booster().feature_names
+
+    for col in expected_features:
         if col not in df.columns:
             df[col] = 0
 
-    df = df[model.feature_names_in_]
+    df = df[expected_features]
 
     prob = model.predict_proba(df)[0][1]
     return {"no_show_risk": round(float(prob), 3)}
 
 
-# @app.post("/predict")
-# def predict(data: Patient):
-#     df = pd.DataFrame([data.dict()])
-#     prob = model.predict_proba(df)[0][1]
-#     return {"no_show_risk": round(float(prob), 3)}
+
