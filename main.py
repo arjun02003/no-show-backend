@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import joblib
 import pandas as pd
@@ -9,20 +9,23 @@ from datetime import datetime
 
 app = FastAPI()
 
-# 🔥 CORS (Frontend ke liye required)
+# ---------- CORS ----------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # local + deploy dono ke liye ok
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------- SERVE FRONTEND ----------
+# index.html must be in same folder
+app.mount("/ui", StaticFiles(directory=".", html=True), name="ui")
 
 # ---------- LOAD MODEL ----------
 model = joblib.load("xgboost_no_show_model.pkl")
 model_features = joblib.load("model_features.pkl")
 
-# ---------- DATABASE SETUP ----------
+# ---------- DATABASE ----------
 conn = sqlite3.connect("predictions.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -64,14 +67,9 @@ class Patient(BaseModel):
 def home():
     return {"status": "No-Show Prediction API running"}
 
-@app.get("/ui")
-def ui():
-    return FileResponse("index.html")
-
 @app.post("/predict")
 def predict(data: Patient):
 
-    # ----- Build input dataframe -----
     df = pd.DataFrame(0, index=[0], columns=model_features)
 
     numeric_fields = [
@@ -83,24 +81,20 @@ def predict(data: Patient):
     for f in numeric_fields:
         df.at[0, f] = getattr(data, f)
 
-    # ----- One-hot encoding -----
-    gcol = f"Gender_{data.Gender.upper()}"
-    if gcol in df.columns:
-        df.at[0, gcol] = 1
+    # One-hot encoding
+    if f"Gender_{data.Gender.upper()}" in df.columns:
+        df.at[0, f"Gender_{data.Gender.upper()}"] = 1
 
-    ncol = f"Neighbourhood_{data.Neighbourhood.upper()}"
-    if ncol in df.columns:
-        df.at[0, ncol] = 1
+    if f"Neighbourhood_{data.Neighbourhood.upper()}" in df.columns:
+        df.at[0, f"Neighbourhood_{data.Neighbourhood.upper()}"] = 1
 
-    scol = f"Season_{data.Season}"
-    if scol in df.columns:
-        df.at[0, scol] = 1
+    if f"Season_{data.Season}" in df.columns:
+        df.at[0, f"Season_{data.Season}"] = 1
 
-    # ----- Prediction -----
-    prob = model.predict_proba(df)[0][1]
-    risk_value = round(float(prob), 3)
+    prob = float(model.predict_proba(df)[0][1])
+    risk_value = round(prob, 3)
 
-    # ----- SAVE TO DATABASE -----
+    # Save to DB
     cursor.execute("""
         INSERT INTO predictions
         (age, lead_time, scheduled_hour, appointment_day,
@@ -121,10 +115,7 @@ def predict(data: Patient):
 
     return {"no_show_risk": risk_value}
 
-# ---------- VIEW SAVED DATA (OPTIONAL BUT COOL) ----------
 @app.get("/history")
 def history():
     cursor.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 10")
-    rows = cursor.fetchall()
-    return rows
-
+    return cursor.fetchall()
