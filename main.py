@@ -10,7 +10,6 @@ app = FastAPI()
 model = joblib.load("xgboost_no_show_model.pkl")
 model_features = joblib.load("model_features.pkl")
 
-
 class Patient(BaseModel):
     Age: int
     LeadTimeDays: int
@@ -22,8 +21,7 @@ class Patient(BaseModel):
     Hipertension: int
     Diabetes: int
     Alcoholism: int
-    Handcap: int
-
+    Handicap: int   # ✅ FIXED
 
 @app.get("/")
 def home():
