@@ -1,15 +1,15 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import pandas as pd
 import joblib
-import traceback
+import pandas as pd
 
-app = FastAPI(title="No-Show Prediction API")
+app = FastAPI()
 
+# Load trained model and feature list
 model = joblib.load("xgboost_no_show_model.pkl")
 model_features = joblib.load("model_features.pkl")
 
-
+# Only SIMPLE inputs from user
 class Patient(BaseModel):
     Age: int
     LeadTimeDays: int
@@ -23,45 +23,37 @@ class Patient(BaseModel):
     Alcoholism: int
     Handcap: int
 
-
 @app.get("/")
 def home():
     return {"status": "No-Show Prediction API running"}
 
-
 @app.post("/predict")
 def predict(data: Patient):
-    try:
-        # 1. Input dataframe
-        df = pd.DataFrame([data.dict()])
+    # user input
+    input_data = data.dict()
 
-        # 2. Add missing features
-        for col in model_features:
-            if col not in df.columns:
-                df[col] = 0
+    # create empty row with ALL model features = 0
+    row = {feature: 0 for feature in model_features}
 
-        # 3. Reorder
-        df = df[model_features]
+    # fill only available features
+    for key, value in input_data.items():
+        if key in row:
+            row[key] = value
 
-        # 4. Force numeric (CRITICAL FIX)
-        df = df.apply(pd.to_numeric)
+    # create dataframe in exact order
+    df = pd.DataFrame([row], columns=model_features)
 
-        # 5. Predict
-        prob = model.predict_proba(df)[0][1]
+    # prediction
+    prob = model.predict_proba(df)[0][1]
 
-        return {"no_show_risk": round(float(prob), 3)}
-
-    except Exception as e:
-        # PRINT FULL ERROR TO RENDER LOGS
-        print("❌ PREDICTION ERROR")
-        print(traceback.format_exc())
-        return {"error": str(e)}
-
+    return {
+        "no_show_risk": round(float(prob), 3)
+    }
 
 @app.get("/debug")
 def debug():
     return {
-        "model_loaded": model is not None,
+        "model_loaded": True,
         "features_count": len(model_features),
         "first_10_features": model_features[:10]
     }
