@@ -52,3 +52,12 @@ def debug():
         "first_10_features": model_features[:10]
     }
 
+@app.get("/debug")
+def debug():
+    return {
+        "model_loaded": True,
+        "features_loaded": len(model_features),
+        "first_10_features": model_features[:10]
+    }
+
+
