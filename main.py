@@ -2,16 +2,14 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import pandas as pd
 import joblib
+import traceback
 
 app = FastAPI(title="No-Show Prediction API")
 
-# Load trained model & frozen feature list
 model = joblib.load("xgboost_no_show_model.pkl")
 model_features = joblib.load("model_features.pkl")
 
 
-# ---------- INPUT SCHEMA ----------
-# Sirf BASIC features user se lenge
 class Patient(BaseModel):
     Age: int
     LeadTimeDays: int
@@ -28,37 +26,42 @@ class Patient(BaseModel):
 
 @app.get("/")
 def home():
-    return {"status": "No-Show Prediction API is running"}
+    return {"status": "No-Show Prediction API running"}
 
 
-# ---------- PREDICTION ----------
 @app.post("/predict")
 def predict(data: Patient):
+    try:
+        # 1. Input dataframe
+        df = pd.DataFrame([data.dict()])
 
-    # Step 1: user input dataframe
-    df = pd.DataFrame([data.dict()])
+        # 2. Add missing features
+        for col in model_features:
+            if col not in df.columns:
+                df[col] = 0
 
-    # Step 2: add ALL missing one-hot columns as 0
-    for col in model_features:
-        if col not in df.columns:
-            df[col] = 0
+        # 3. Reorder
+        df = df[model_features]
 
-    # Step 3: reorder columns EXACTLY as training
-    df = df[model_features]
+        # 4. Force numeric (CRITICAL FIX)
+        df = df.apply(pd.to_numeric)
 
-    # Step 4: predict
-    prob = model.predict_proba(df)[0][1]
+        # 5. Predict
+        prob = model.predict_proba(df)[0][1]
 
-    return {
-        "no_show_risk": round(float(prob), 3)
-    }
+        return {"no_show_risk": round(float(prob), 3)}
+
+    except Exception as e:
+        # PRINT FULL ERROR TO RENDER LOGS
+        print("❌ PREDICTION ERROR")
+        print(traceback.format_exc())
+        return {"error": str(e)}
 
 
-# ---------- DEBUG ----------
 @app.get("/debug")
 def debug():
     return {
-        "model_loaded": True,
-        "total_model_features": len(model_features),
-        "sample_features": model_features[:15]
+        "model_loaded": model is not None,
+        "features_count": len(model_features),
+        "first_10_features": model_features[:10]
     }
