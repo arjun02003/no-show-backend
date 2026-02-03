@@ -5,11 +5,14 @@ import pandas as pd
 
 app = FastAPI()
 
-# Load trained model and feature list
+# ---------------- LOAD MODEL ----------------
 model = joblib.load("xgboost_no_show_model.pkl")
 model_features = joblib.load("model_features.pkl")
 
-# Only SIMPLE inputs from user
+# 🔥 CRITICAL FIX: attach feature names to booster
+model.get_booster().feature_names = model_features
+
+# ---------------- INPUT SCHEMA ----------------
 class Patient(BaseModel):
     Age: int
     LeadTimeDays: int
@@ -23,29 +26,25 @@ class Patient(BaseModel):
     Alcoholism: int
     Handcap: int
 
+# ---------------- ROUTES ----------------
 @app.get("/")
 def home():
-    return {"status": "No-Show Prediction API running"}
+    return {"status": "No-Show Prediction API is running"}
 
 @app.post("/predict")
 def predict(data: Patient):
     try:
-        # user input
-        input_data = data.dict()
+        # initialize all features = 0
+        row = {f: 0 for f in model_features}
 
-        # initialize ALL features = 0
-        row = {feature: 0 for feature in model_features}
-
-        # fill user provided values
-        for k, v in input_data.items():
+        # fill user input
+        for k, v in data.dict().items():
             if k in row:
                 row[k] = int(v)
 
-        # dataframe with exact order
+        # dataframe with exact training features
         df = pd.DataFrame([row])
         df = df[model_features]
-
-        # 🔴 CRITICAL FIX: force numeric dtype
         df = df.astype(float)
 
         prob = model.predict_proba(df)[0][1]
@@ -55,17 +54,13 @@ def predict(data: Patient):
         }
 
     except Exception as e:
-        # so we SEE the real error instead of 500
-        return {
-            "error": str(e)
-        }
-
-
+        return {"error": str(e)}
 
 @app.get("/debug")
 def debug():
     return {
         "model_loaded": True,
-        "features_count": len(model_features),
+        "features_loaded": len(model_features),
         "first_10_features": model_features[:10]
     }
+
