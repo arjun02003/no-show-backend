@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import joblib
 import pandas as pd
 
+
 app = FastAPI()
 
 # load model + feature list
@@ -28,21 +29,30 @@ class Patient(BaseModel):
 def home():
     return {"status": "No-Show Prediction API is running"}
 
-
 @app.post("/predict")
 def predict(data: Patient):
-    df = pd.DataFrame([data.dict()])
+    # user input
+    input_dict = data.dict()
 
-    # add missing columns
+    # create dataframe
+    df = pd.DataFrame([input_dict])
+
+    # ensure ALL model features exist
     for col in model_features:
         if col not in df.columns:
             df[col] = 0
 
-    # enforce correct order
+    # reorder exactly as training
     df = df[model_features]
 
+    # prediction
     prob = model.predict_proba(df)[0][1]
-    return {"no_show_risk": round(float(prob), 3)}
+
+    return {
+        "no_show_risk": round(float(prob), 3)
+    }
+
+
 
 @app.get("/debug")
 def debug():
