@@ -43,3 +43,12 @@ def predict(data: Patient):
 
     prob = model.predict_proba(df)[0][1]
     return {"no_show_risk": round(float(prob), 3)}
+
+@app.get("/debug")
+def debug():
+    return {
+        "model_loaded": True,
+        "features_loaded": len(model_features),
+        "first_10_features": model_features[:10]
+    }
+
