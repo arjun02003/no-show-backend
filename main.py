@@ -5,14 +5,11 @@ import pandas as pd
 
 app = FastAPI()
 
-# ---------------- LOAD MODEL ----------------
+# Load model + features
 model = joblib.load("xgboost_no_show_model.pkl")
 model_features = joblib.load("model_features.pkl")
 
-# 🔥 CRITICAL FIX: attach feature names to booster
-model.get_booster().feature_names = model_features
-
-# ---------------- INPUT SCHEMA ----------------
+# ---------- INPUT SCHEMA ----------
 class Patient(BaseModel):
     Age: int
     LeadTimeDays: int
@@ -26,41 +23,58 @@ class Patient(BaseModel):
     Alcoholism: int
     Handcap: int
 
-# ---------------- ROUTES ----------------
+    Gender: str              # "M" or "F"
+    Neighbourhood: str       # e.g. "JARDIM CAMBURI"
+    Season: str              # e.g. "Summer"
+
+
 @app.get("/")
 def home():
-    return {"status": "No-Show Prediction API is running"}
+    return {"status": "No-Show Prediction API running"}
+
 
 @app.post("/predict")
 def predict(data: Patient):
-    try:
-        # initialize all features = 0
-        row = {f: 0 for f in model_features}
 
-        # fill user input
-        for k, v in data.dict().items():
-            if k in row:
-                row[k] = int(v)
+    # 1️⃣ Empty dataframe with ALL model features
+    df = pd.DataFrame(0, index=[0], columns=model_features)
 
-        # dataframe with exact training features
-        df = pd.DataFrame([row])
-        df = df[model_features]
-        df = df.astype(float)
+    # 2️⃣ Fill numeric features
+    numeric_fields = [
+        "Age", "LeadTimeDays", "ScheduledHour", "AppointmentDayOfWeek",
+        "SMS_received", "PastNoShows", "Scholarship",
+        "Hipertension", "Diabetes", "Alcoholism", "Handcap"
+    ]
 
-        prob = model.predict_proba(df)[0][1]
+    for f in numeric_fields:
+        df.at[0, f] = getattr(data, f)
 
-        return {
-            "no_show_risk": round(float(prob), 3)
-        }
+    # 3️⃣ Gender one-hot
+    gender_col = f"Gender_{data.Gender.upper()}"
+    if gender_col in df.columns:
+        df.at[0, gender_col] = 1
 
-    except Exception as e:
-        return {"error": str(e)}
+    # 4️⃣ Neighbourhood one-hot
+    neigh_col = f"Neighbourhood_{data.Neighbourhood.upper()}"
+    if neigh_col in df.columns:
+        df.at[0, neigh_col] = 1
+
+    # 5️⃣ Season one-hot
+    season_col = f"Season_{data.Season}"
+    if season_col in df.columns:
+        df.at[0, season_col] = 1
+
+    # 6️⃣ Predict
+    prob = model.predict_proba(df)[0][1]
+
+    return {
+        "no_show_risk": round(float(prob), 3)
+    }
+
 
 @app.get("/debug")
 def debug():
     return {
-        "model_loaded": True,
-        "features_loaded": len(model_features),
-        "first_10_features": model_features[:10]
+        "total_features": len(model_features),
+        "first_10": model_features[:10]
     }
-
